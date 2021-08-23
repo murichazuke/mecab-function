@@ -1,0 +1,8 @@
+version: '2'
+services:
+  serverless:
+    build: .
+    volumes:
+      - .:/var/task
+    ports:
+      - 9080:8080
