@@ -1,10 +1,13 @@
 # mecab-ipadic-neologd builder stage
+# ==================================
+
 ARG APP_NEOLOGD_DIR=/opt/mecab-ipadic-neologd
 
 FROM debian:bullseye-slim as neologd-builder
 
 ARG APP_SRC_DIR=/usr/local/src/mecab-ipadic-neologd
 ARG APP_NEOLOGD_DIR
+ENV LC_ALL=C.UTF-8
 
 RUN apt-get update
 RUN apt-get install \
@@ -21,42 +24,51 @@ RUN ${APP_SRC_DIR}/bin/install-mecab-ipadic-neologd \
     --asuser \
     --prefix ${APP_NEOLOGD_DIR}
 
-# base stage
+# Base stage
+# ==========
+
 FROM public.ecr.aws/lambda/python:3.8 as base
 
 ARG APP_NEOLOGD_DIR
 ENV \
     # write-out stdout/stderr immediately
     PYTHONUNBUFFERED=1 \
-    # prevents python creating .pyc files
+    # prevents python from creating annoying .pyc files
     PYTHONDONTWRITEBYTECODE=1 \
     \
-    # poetry
-    POETRY_HOME=/opt/poetry \
+    # pip
+    PIP_NO_CACHE_DIR=off \
+    PIP_DISABLE_PIP_VERSION_CHECK=on \
     \
+    # Poetry installation location
+    POETRY_HOME=/opt/poetry \
+    # Let poetry install packages system-widely
+    POETRY_VIRTUALENVS_CREATE=false \
+    \
+    # application specific variables
     APP_SITE_PACKAGES=/var/lang/lib/python3.8/site-packages \
     APP_DIR=${LAMBDA_TASK_ROOT} \
     APP_NEOLOGD_DIR=${APP_NEOLOGD_DIR}
 
-ENV PATH="$POETRY_HOME/bin:$PATH"
+ENV PATH="${POETRY_HOME}/bin:${PATH}"
 
-# builder stage
+# Builder stage
+# =============
+
 FROM base AS builder
 
 RUN \
-    pip install poetry && \
-    poetry --version && \
-    (test -d || mkdir ${APP_DIR})
+    curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/install-poetry.py \
+        | /var/lang/bin/python -
 
 COPY pyproject.toml poetry.lock ${APP_DIR}
 RUN \
     cd ${APP_DIR} && \
-    poetry export \
-        --no-interaction --no-ansi -vvv \
-        -f requirements.txt --without-hashes \
-        | pip3 install -r /dev/stdin
+    poetry install --no-dev --no-interaction --no-ansi -vvv
 
-# runtime image
+# Runtime image
+# =============
+
 FROM base AS runtime
 
 COPY --from=builder ${APP_SITE_PACKAGES} ${APP_SITE_PACKAGES}
@@ -65,3 +77,18 @@ COPY --from=neologd-builder ${APP_NEOLOGD_DIR} ${APP_NEOLOGD_DIR}
 
 # You can overwrite command in `serverless.yml` template
 CMD ["app.handler"]
+
+# Develop image
+# =============
+
+FROM runtime AS dev
+
+COPY --from=builder ${POETRY_HOME} ${POETRY_HOME}
+
+RUN \
+    cd ${APP_DIR} && \
+    poetry install --no-interaction --no-ansi -vvv
+
+WORKDIR ${APP_DIR}
+ENTRYPOINT []
+CMD ["python", "-c", "import signal as s; s.sigwait([s.SIGINT])"]
