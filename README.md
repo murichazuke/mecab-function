@@ -14,10 +14,22 @@ In order to deploy your service, run the following command
 sls deploy
 ```
 
-## Test your service
+## Run your service
 
 After successful deployment, you can test your service remotely by using the following command:
 
 ```
 sls invoke --function hello
+```
+
+## Run the function locally
+
+```bash
+$ docker-compose exec workspace python app.py --output=json --data='{"body": "中居正広のこおりつけ"}'
+```
+
+## Run linters and unittests
+
+```bash
+$ docker-compose exec workspace poetry run tox
 ```

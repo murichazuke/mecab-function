@@ -4,13 +4,16 @@ services:
     build:
       context: .
       target: dev
+    env_file: .env
     volumes:
       - .:/var/task
 
+  # TODO: rename to RIE
   serverless:
     build:
       context: .
       target: runtime
+    env_file: .env
     volumes:
       - .:/var/task
     ports:

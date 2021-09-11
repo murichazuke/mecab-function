@@ -61,7 +61,11 @@ RUN \
     curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/install-poetry.py \
         | /var/lang/bin/python -
 
-COPY pyproject.toml poetry.lock ${APP_DIR}
+RUN \
+    # Required to build neologdn
+    yum install -y gcc-c++
+
+COPY pyproject.toml poetry.lock ${APP_DIR}/
 RUN \
     cd ${APP_DIR} && \
     poetry install --no-dev --no-interaction --no-ansi -vvv
@@ -71,12 +75,13 @@ RUN \
 
 FROM base AS runtime
 
+COPY --from=public.ecr.aws/sentry/sentry-python-serverless-sdk:6 /opt/ /opt
 COPY --from=builder ${APP_SITE_PACKAGES} ${APP_SITE_PACKAGES}
 COPY . ${APP_DIR}
 COPY --from=neologd-builder ${APP_NEOLOGD_DIR} ${APP_NEOLOGD_DIR}
 
 # You can overwrite command in `serverless.yml` template
-CMD ["app.handler"]
+CMD ["sentry_sdk.integrations.init_serverless_sdk.sentry_lambda_handler"]
 
 # Develop image
 # =============
